@@ -10,6 +10,7 @@ package io.zeebe.test;
 import io.zeebe.client.ZeebeClient;
 import io.zeebe.containers.ZeebeContainer;
 import io.zeebe.containers.ZeebeGatewayContainer;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
@@ -17,22 +18,19 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.jodah.failsafe.Failsafe;
 import net.jodah.failsafe.RetryPolicy;
-import org.junit.rules.TestWatcher;
-import org.junit.runner.Description;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerFetchException;
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.Network;
 
-class ContainerStateRule extends TestWatcher {
-
+public class ContainerState {
   private static final RetryPolicy<Void> CONTAINER_START_RETRY_POLICY =
       new RetryPolicy().withMaxRetries(5).withBackoff(3, 30, ChronoUnit.SECONDS);
 
   private static final Pattern DOUBLE_NEWLINE = Pattern.compile("\n\n");
   private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(30);
-  private static final Logger LOG = LoggerFactory.getLogger(ContainerStateRule.class);
+  private static final Logger LOG = LoggerFactory.getLogger(ContainerState.class);
 
   static {
     CONTAINER_START_RETRY_POLICY
@@ -60,30 +58,21 @@ class ContainerStateRule extends TestWatcher {
     return client;
   }
 
-  @Override
-  protected void failed(final Throwable e, final Description description) {
-    super.failed(e, description);
-    if (broker != null) {
-      log("Broker", broker.getLogs());
-    }
-
-    if (gateway != null) {
-      log("Gateway", gateway.getLogs());
-    }
-  }
-
-  @Override
-  protected void finished(final Description description) {
-    close();
-  }
-
-  public ContainerStateRule broker(final String version, final String volumePath) {
+  public ContainerState broker(final String version) {
     brokerVersion = version;
-    this.volumePath = volumePath;
     return this;
   }
 
-  public ContainerStateRule withStandaloneGateway(final String gatewayVersion) {
+  public ContainerState withVolumePath(final Path path) {
+    volumePath = path.toAbsolutePath().toString();
+    return this;
+  }
+
+  public String getVolumePath() {
+    return volumePath;
+  }
+
+  public ContainerState withStandaloneGateway(final String gatewayVersion) {
     this.gatewayVersion = gatewayVersion;
     return this;
   }
@@ -109,7 +98,7 @@ class ContainerStateRule extends TestWatcher {
       contactPoint = broker.getExternalGatewayAddress();
     } else {
       gateway =
-          new ZeebeGatewayContainer(gatewayVersion)
+          new ZeebeGatewayContainer("camunda/zeebe:" + gatewayVersion)
               .withEnv("ZEEBE_GATEWAY_CLUSTER_CONTACTPOINT", broker.getInternalClusterAddress())
               .withEnv("ZEEBE_LOG_LEVEL", "DEBUG")
               .withNetwork(network);
@@ -119,6 +108,16 @@ class ContainerStateRule extends TestWatcher {
     }
 
     client = ZeebeClient.newClientBuilder().gatewayAddress(contactPoint).usePlaintext().build();
+  }
+
+  public void onFailure() {
+    if (broker != null) {
+      log("Broker", broker.getLogs());
+    }
+
+    if (gateway != null) {
+      log("Gateway", gateway.getLogs());
+    }
   }
 
   private void log(final String type, final String log) {
