@@ -10,7 +10,7 @@ package io.zeebe.test;
 import io.zeebe.client.ZeebeClient;
 import io.zeebe.containers.ZeebeContainer;
 import io.zeebe.containers.ZeebeGatewayContainer;
-import java.nio.file.Path;
+import io.zeebe.test.util.testcontainers.ManagedVolume;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
@@ -45,17 +45,31 @@ public class ContainerState {
             });
   }
 
+  private final Network network;
+
   private ZeebeContainer broker;
   private ZeebeGatewayContainer gateway;
   private ZeebeClient client;
-  private Network network;
+  private PartitionsActuatorClient partitionsActuatorClient;
+  private ManagedVolume volume;
 
   private String brokerVersion;
-  private String volumePath;
   private String gatewayVersion;
+
+  public ContainerState(final Network network) {
+    this.network = network;
+  }
 
   public ZeebeClient client() {
     return client;
+  }
+
+  public ZeebeContainer getBroker() {
+    return broker;
+  }
+
+  public ZeebeGatewayContainer getGateway() {
+    return gateway;
   }
 
   public ContainerState broker(final String version) {
@@ -63,13 +77,9 @@ public class ContainerState {
     return this;
   }
 
-  public ContainerState withVolumePath(final Path path) {
-    volumePath = path.toAbsolutePath().toString();
+  public ContainerState withVolume(final ManagedVolume volume) {
+    this.volume = volume;
     return this;
-  }
-
-  public String getVolumePath() {
-    return volumePath;
   }
 
   public ContainerState withStandaloneGateway(final String gatewayVersion) {
@@ -79,13 +89,12 @@ public class ContainerState {
 
   public void start(final boolean enableDebug) {
     final String contactPoint;
-    network = Network.newNetwork();
     broker =
         new ZeebeContainer("camunda/zeebe:" + brokerVersion)
-            .withFileSystemBind(volumePath, "/usr/local/zeebe/data")
             .withEnv("ZEEBE_LOG_LEVEL", "DEBUG")
             .withEnv("ZEEBE_BROKER_DATA_SNAPSHOTPERIOD", "1m")
             .withEnv("ZEEBE_BROKER_DATA_LOGINDEXDENSITY", "1")
+            .withCreateContainerCmdModifier(volume::attachVolumeToContainer)
             .withNetwork(network);
 
     if (enableDebug) {
@@ -108,6 +117,11 @@ public class ContainerState {
     }
 
     client = ZeebeClient.newClientBuilder().gatewayAddress(contactPoint).usePlaintext().build();
+    partitionsActuatorClient = new PartitionsActuatorClient(broker.getExternalMonitoringAddress());
+  }
+
+  public PartitionsActuatorClient getPartitionsActuatorClient() {
+    return partitionsActuatorClient;
   }
 
   public void onFailure() {
@@ -194,13 +208,7 @@ public class ContainerState {
       broker = null;
     }
 
-    if (network != null) {
-      network.close();
-      network = null;
-    }
-
     brokerVersion = null;
     gatewayVersion = null;
-    volumePath = null;
   }
 }

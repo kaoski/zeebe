@@ -52,39 +52,34 @@ public class UpgradeTestCaseProvider implements ArgumentsProvider {
             .beforeUpgrade(this::awaitStartMessageSubscription)
             .afterUpgrade(this::publishMessage)
             .done(),
-        // TODO (saig0): enable the test case when upgrading from 0.25.0
-        // - an upgrade from 0.24.0 is not possible because a bug fix (#4959) causes an issue in
-        // the reprocessing (#5268)
-        //        scenario()
-        //            .name("message event sub-process")
-        //            .deployWorkflow(
-        //                Bpmn.createExecutableProcess(PROCESS_ID)
-        //                    .eventSubProcess(
-        //                        "event-subprocess",
-        //                        eventSubProcess ->
-        //                            eventSubProcess
-        //                                .startEvent()
-        //                                .message(m ->
-        // m.name(MESSAGE).zeebeCorrelationKeyExpression("key"))
-        //                                .interrupting(false)
-        //                                .endEvent())
-        //                    .startEvent()
-        //                    .serviceTask(TASK, t -> t.zeebeJobType(TASK))
-        //                    .endEvent()
-        //                    .done())
-        //            .createInstance(Map.of("key", "123"))
-        //            .beforeUpgrade(
-        //                state -> {
-        //                  publishMessage(state, -1L, -1L);
-        //
-        //                  TestUtil.waitUntil(
-        //                      () -> state.hasElementInState("event-subprocess",
-        // "ELEMENT_COMPLETED"));
-        //
-        //                  return activateJob(state);
-        //                })
-        //            .afterUpgrade(this::completeJob)
-        //            .done(),
+        scenario()
+            .name("message event sub-process")
+            .deployWorkflow(
+                Bpmn.createExecutableProcess(PROCESS_ID)
+                    .eventSubProcess(
+                        "event-subprocess",
+                        eventSubProcess ->
+                            eventSubProcess
+                                .startEvent()
+                                .message(m -> m.name(MESSAGE).zeebeCorrelationKeyExpression("key"))
+                                .interrupting(false)
+                                .endEvent())
+                    .startEvent()
+                    .serviceTask(TASK, t -> t.zeebeJobType(TASK))
+                    .endEvent()
+                    .done())
+            .createInstance(Map.of("key", "123"))
+            .beforeUpgrade(
+                state -> {
+                  publishMessage(state, -1L, -1L);
+
+                  TestUtil.waitUntil(
+                      () -> state.hasElementInState("event-subprocess", "ELEMENT_COMPLETED"));
+
+                  return activateJob(state);
+                })
+            .afterUpgrade(this::completeJob)
+            .done(),
         scenario()
             .name("timer")
             .deployWorkflow(timerWorkflow())
