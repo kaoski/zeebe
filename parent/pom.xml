@@ -1418,6 +1418,15 @@
                   </ignoredUnusedDeclaredDependencies>
                 </configuration>
               </execution>
+              <execution>
+                <id>go-offline</id>
+                <goals>
+                  <goal>go-offline</goal>
+                </goals>
+                <configuration>
+                  <includeArtifactIds>org.codehaus.plexus:plexus-utils:jar:1.1</includeArtifactIds>
+                </configuration>
+              </execution>
             </executions>
           </plugin>
         </plugins>
